@@ -293,16 +293,42 @@ class BenchmarkCausalWanSelfAttention(nn.Module):
                 q_raw_i = q_hilbert_raw[:, i]
 
                 # 1. 邻域搜索 (Neighborhood Search)
+                # if timer: timer.start("reuse_search")
+                # if search_radius == 0:
+                #     max_sim = (q_i_lite * q_prev_lite).sum(dim=1)
+                #     best_idx = torch.arange(N, device=q.device).expand(b, N)
+                #     if timer: timer.end() # 结束 Search
+
+                #     # 2. 方差计算 (Variance Calc)
+                #     if timer: timer.start("reuse_variance")
+                #     local_variance = q_raw_i.var(dim=1)
+                #     if timer: timer.end()
+                # else:
+                #     # 1. 依然做 Padding
+                #     # q_prev_lite: [B, sub_C, N]
+                #     q_prev_pad = F.pad(q_prev_lite, (search_radius, search_radius), mode='constant', value=0.0)
+    
+                #     # 2. 使用 unfold 提取滑动窗口，这一步避免了 for 循环
+                #     # 形状变为: [B, sub_C, N, 2 * search_radius + 1]
+                #     window_size = search_radius * 2 + 1
+                #     q_prev_windows = q_prev_pad.unfold(dimension=-1, size=window_size, step=1)
+    
+                #     # 3. 利用广播机制直接计算相似度，并沿 sub_C (dim=1) 求和
+                #     # q_i_lite.unsqueeze(-1) 形状: [B, sub_C, N, 1]
+                #     # sims_stack 形状: [B, N, 2 * search_radius + 1]
+                #     sims_stack = (q_i_lite.unsqueeze(-1) * q_prev_windows).sum(dim=1)
+    
+                #     # 4. 直接在最后一个维度找最大值
+                #     max_sim, best_offset_idx = sims_stack.max(dim=-1)
+    
+                #     base_indices = torch.arange(N, device=q.device).expand(b, N)
+                #     best_idx = (base_indices + best_offset_idx - search_radius).clamp(0, N - 1)
+                #     if timer: timer.end() # 结束 Search
+                # 优化后的 reuse_search 代码
                 if timer: timer.start("reuse_search")
                 if search_radius == 0:
                     max_sim = (q_i_lite * q_prev_lite).sum(dim=1)
                     best_idx = torch.arange(N, device=q.device).expand(b, N)
-                    if timer: timer.end() # 结束 Search
-
-                    # 2. 方差计算 (Variance Calc)
-                    if timer: timer.start("reuse_variance")
-                    local_variance = q_raw_i.var(dim=1)
-                    if timer: timer.end()
                 else:
                     # 1. 依然做 Padding
                     # q_prev_lite: [B, sub_C, N]
@@ -323,7 +349,7 @@ class BenchmarkCausalWanSelfAttention(nn.Module):
     
                     base_indices = torch.arange(N, device=q.device).expand(b, N)
                     best_idx = (base_indices + best_offset_idx - search_radius).clamp(0, N - 1)
-                    if timer: timer.end() # 结束 Search
+                    if timer: timer.end()
 
                     # 2. 方差计算 (Variance Calc)
                     if timer: timer.start("reuse_variance")
